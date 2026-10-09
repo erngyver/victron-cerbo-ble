@@ -1,0 +1,35 @@
+#!/bin/sh
+exec 2>&1
+# At boot, hold off Bluetooth until the network is up. The Cerbo's Wi-Fi and
+# Bluetooth share one Realtek RTL8723DU chip, and BLE traffic while Wi-Fi is
+# still joining has left it off the network after reboots, firmware updates in
+# particular (victronenergy/venus#1618 is the coexistence bug). Wait for a
+# default route (Wi-Fi or Ethernet has an address) and let it settle; give up
+# after NET_WAIT seconds so the service still runs where there is no network
+# to join, e.g. on the road. A restart well after boot starts at once.
+NET_WAIT=${NET_WAIT:-180}
+SETTLE=${SETTLE:-30}
+BOOT_WINDOW=${BOOT_WINDOW:-300}
+
+has_route() {
+    { ip route 2>/dev/null || route -n 2>/dev/null; } | grep -qE '^(default|0\.0\.0\.0)'
+}
+
+uptime_s=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+if [ "$uptime_s" -lt "$BOOT_WINDOW" ]; then
+    i=0
+    until has_route; do
+        if [ $i -ge "$NET_WAIT" ]; then
+            echo "no network after ${NET_WAIT}s; starting anyway"
+            SETTLE=0
+            break
+        fi
+        sleep 5
+        i=$((i + 5))
+    done
+    if [ "$SETTLE" -gt 0 ]; then
+        echo "network up after ${i}s; starting in ${SETTLE}s"
+        sleep "$SETTLE"
+    fi
+fi
+exec python3 -u /data/dometic/bridge.py

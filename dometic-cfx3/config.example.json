@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to sites/<host>/dometic-cfx3.json (git-ignored) and set the fridge's Bluetooth address. Find it with btmon while dbus-ble-sensors is scanning: the CFX3 advertises its name.",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "address_type": "public"
+}

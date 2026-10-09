@@ -1,0 +1,113 @@
+[
+  {
+    "id": "cfx3_tab",
+    "type": "tab",
+    "label": "Dometic CFX3",
+    "disabled": false,
+    "info": "Bridges the CFX3-75DZ fridge into Venus virtual temperature sensors. Telemetry arrives from /data/dometic/bridge.py over the local broker."
+  },
+  {
+    "id": "cfx3_broker",
+    "type": "mqtt-broker",
+    "name": "Cerbo local",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "nodered-cfx3",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": ""
+  },
+  {
+    "id": "cfx3_mqtt_in",
+    "type": "mqtt in",
+    "z": "cfx3_tab",
+    "name": "CFX3 telemetry",
+    "topic": "dometic/cfx3/#",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "cfx3_broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 170,
+    "y": 200,
+    "wires": [
+      [
+        "cfx3_route"
+      ]
+    ]
+  },
+  {
+    "id": "cfx3_route",
+    "type": "function",
+    "z": "cfx3_tab",
+    "name": "CFX3 -> virtual sensors",
+    "func": "// CFX3 MQTT -> Victron Virtual Temperature Sensors\n// Routes bridge telemetry onto two victron-virtual nodes, one per zone.\n// Input:  {\"topic\": \"dometic/cfx3/fridge/temperature\", \"payload\": \"2.0\"}\n// Output: [{\"payload\": {\"Temperature\": 2.0, \"Status\": 0}}, null]   (fridge)\n//         [null, {\"payload\": {\"Temperature\": -16.0, \"Status\": 0}}] (freezer)\n//\n// When there is nothing trustworthy to show, the temperature is published as\n// null, which the victron-virtual node writes to D-Bus as invalid. That is\n// what a real Venus sensor does when it loses contact, and it is the only\n// thing the GX display and VRM actually render (as \"--\"): a Status flag on\n// its own changes nothing visible, and a stale number looks healthy.\n//\n// Two conditions hide the temperatures:\n//   - the BLE link is down or the bridge process is dead (Status 1)\n//   - the fridge is switched off. A CFX3 \"off\" is standby: it keeps its\n//     Bluetooth up and keeps reporting the temperature of a warming box, so\n//     without this VRM shows +17C in the freezer as a valid reading.\n//\n// Status follows the Victron temperature enum: 0 = Ok, 1 = Disconnected.\n\nconst STATUS_OK = 0;\nconst STATUS_DISCONNECTED = 1;\n\ntry {\n    if (!msg.topic || typeof msg.topic !== 'string') {\n        node.warn(\"Message without a topic\");\n        return null;\n    }\n\n    const suffix = msg.topic.replace(/^dometic\\/cfx3\\//, '');\n    const payload = String(msg.payload).trim();\n\n    // \"bridge\" (process alive, last will) and \"link\" (BLE up) are separate\n    // retained topics delivered in no fixed order after a Node-RED restart,\n    // so each has its own flag: one coming back must not clear the other.\n    const hidden = () => flow.get('cfx3_bridge_down') || flow.get('cfx3_link_down')\n        || flow.get('cfx3_cooler_off');\n    const blank = (status) => {\n        const out = {payload: {Temperature: null, Status: status}};\n        return [out, {payload: Object.assign({}, out.payload)}];\n    };\n\n    // Bridge process died (MQTT last will), or the BLE link dropped.\n    if (suffix === 'bridge' || suffix === 'link') {\n        const down = (payload === 'offline' || payload === 'disconnected');\n        flow.set(suffix === 'bridge' ? 'cfx3_bridge_down' : 'cfx3_link_down', down);\n        if (down) {\n            node.status({fill: \"red\", shape: \"ring\", text: suffix + \": \" + payload});\n            return blank(STATUS_DISCONNECTED);\n        }\n        node.status({fill: \"green\", shape: \"dot\", text: suffix + \": \" + payload});\n        return null;    // the next temperature restores the sensors\n    }\n\n    // Fridge master power. 0 is standby: electronics on, cooling off.\n    if (suffix === 'power/cooler') {\n        const off = (payload === '0');\n        flow.set('cfx3_cooler_off', off);\n        if (off) {\n            node.status({fill: \"grey\", shape: \"ring\", text: \"fridge off\"});\n            return blank(STATUS_OK);\n        }\n        node.status({fill: \"green\", shape: \"dot\", text: \"fridge on\"});\n        return null;\n    }\n\n    if (suffix !== 'fridge/temperature' && suffix !== 'freezer/temperature') {\n        // Setpoints, doors, battery, history: published for other flows.\n        return null;\n    }\n\n    const isFridge = (suffix === 'fridge/temperature');\n\n    // Retained temperatures can arrive after an \"off\" on restart; keep them out.\n    if (hidden()) {\n        const out = {payload: {Temperature: null}};\n        return isFridge ? [out, null] : [null, out];\n    }\n\n    const temperature = parseFloat(payload);\n    if (isNaN(temperature)) {\n        node.warn(\"Could not parse temperature from: \" + msg.payload);\n        node.status({fill: \"red\", shape: \"dot\", text: \"Parse error\"});\n        return null;\n    }\n\n    node.status({\n        fill: \"green\",\n        shape: \"dot\",\n        text: (isFridge ? \"fridge \" : \"freezer \") + temperature.toFixed(1) + \"\u00b0C\"\n    });\n    const out = {payload: {Temperature: temperature, Status: STATUS_OK}};\n    return isFridge ? [out, null] : [null, out];\n\n} catch (error) {\n    node.error(\"Error routing CFX3 telemetry: \" + error.message);\n    node.status({fill: \"red\", shape: \"dot\", text: \"Error\"});\n    return null;\n}\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 200,
+    "wires": [
+      [
+        "cfx3_fridge"
+      ],
+      [
+        "cfx3_freezer"
+      ]
+    ]
+  },
+  {
+    "id": "cfx3_fridge",
+    "type": "victron-virtual",
+    "z": "cfx3_tab",
+    "name": "Fridge",
+    "device": "temperature",
+    "default_values": true,
+    "temperature_type": 1,
+    "include_humidity": false,
+    "include_pressure": false,
+    "include_temp_battery": false,
+    "temp_battery_voltage": 3.3,
+    "outputs": 1,
+    "x": 700,
+    "y": 160,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "cfx3_freezer",
+    "type": "victron-virtual",
+    "z": "cfx3_tab",
+    "name": "Freezer",
+    "device": "temperature",
+    "default_values": true,
+    "temperature_type": 6,
+    "include_humidity": false,
+    "include_pressure": false,
+    "include_temp_battery": false,
+    "temp_battery_voltage": 3.3,
+    "outputs": 1,
+    "x": 700,
+    "y": 240,
+    "wires": [
+      []
+    ]
+  }
+]

@@ -1,0 +1,100 @@
+[
+  {
+    "id": "outside_temp_tab",
+    "type": "tab",
+    "label": "Outside Temp",
+    "disabled": false,
+    "info": "Re-exposes the Mopeka propane sensor's temperature as a Venus virtual Outdoor temperature sensor."
+  },
+  {
+    "id": "ot_mopeka_temp",
+    "type": "victron-input-custom",
+    "z": "outside_temp_tab",
+    "service": "com.victronenergy.tank/24",
+    "path": "/Temperature",
+    "serviceObj": {
+      "service": "com.victronenergy.tank/24",
+      "name": "Propane"
+    },
+    "pathObj": {
+      "path": "/Temperature",
+      "type": "float",
+      "name": "Temperature (C)"
+    },
+    "name": "Mopeka temperature",
+    "onlyChanges": false,
+    "outputs": 1,
+    "x": 180,
+    "y": 120,
+    "wires": [
+      [
+        "ot_wrap",
+        "ot_watchdog"
+      ]
+    ]
+  },
+  {
+    "id": "ot_wrap",
+    "type": "function",
+    "z": "outside_temp_tab",
+    "name": "Mopeka -> virtual sensor",
+    "func": "// Mopeka Temperature -> Victron Virtual Outdoor Sensor\n// Wraps the tank sensor's temperature for a victron-virtual temperature node.\n// Input:  {\"payload\": 16.0}                      (from victron-input node, \u00b0C)\n// Output: {\"payload\": {\"Temperature\": 16.0, \"Status\": 0}}\n//\n// The Mopeka sits under the propane tank outside, so its temperature is a\n// usable outdoor reading that Venus otherwise only shows as tank data.\n// Status follows the Victron temperature enum: 0 = Ok, 1 = Disconnected.\n// A separate trigger node blanks the temperature (null, shown as \"--\") and\n// sets Status 1 if nothing arrives for 30 minutes.\n\nconst STATUS_OK = 0;\n\ntry {\n    const temperature = parseFloat(msg.payload);\n\n    if (isNaN(temperature)) {\n        node.warn(\"Could not parse temperature from: \" + msg.payload);\n        node.status({fill: \"red\", shape: \"dot\", text: \"Parse error\"});\n        return null;\n    }\n\n    node.status({fill: \"green\", shape: \"dot\", text: temperature.toFixed(1) + \"\u00b0C\"});\n    msg.payload = {Temperature: temperature, Status: STATUS_OK};\n    return msg;\n\n} catch (error) {\n    node.error(\"Error wrapping Mopeka temperature: \" + error.message);\n    node.status({fill: \"red\", shape: \"dot\", text: \"Error\"});\n    return null;\n}\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 120,
+    "wires": [
+      [
+        "ot_outdoor"
+      ]
+    ]
+  },
+  {
+    "id": "ot_watchdog",
+    "type": "trigger",
+    "z": "outside_temp_tab",
+    "name": "no data 30 min -> Disconnected",
+    "op1": "",
+    "op2": "{\"Temperature\":null,\"Status\":1}",
+    "op1type": "nul",
+    "op2type": "json",
+    "duration": "30",
+    "extend": true,
+    "overrideDelay": false,
+    "units": "min",
+    "reset": "",
+    "bytopic": "all",
+    "topic": "topic",
+    "outputs": 1,
+    "x": 450,
+    "y": 180,
+    "wires": [
+      [
+        "ot_outdoor"
+      ]
+    ]
+  },
+  {
+    "id": "ot_outdoor",
+    "type": "victron-virtual",
+    "z": "outside_temp_tab",
+    "name": "Outside",
+    "device": "temperature",
+    "default_values": true,
+    "temperature_type": 4,
+    "include_humidity": false,
+    "include_pressure": false,
+    "include_temp_battery": false,
+    "temp_battery_voltage": 3.3,
+    "outputs": 1,
+    "x": 700,
+    "y": 120,
+    "wires": [
+      []
+    ]
+  }
+]

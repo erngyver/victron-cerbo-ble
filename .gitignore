@@ -1,0 +1,3 @@
+# Per-installation configs: hosts, Bluetooth addresses, pack layouts.
+sites/
+__pycache__/

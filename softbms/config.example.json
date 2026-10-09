@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to sites/<host>/softbms.json (git-ignored). protocol: redodo (LiTime/Redodo/Power Queen) or roypow (PowerUrus/Epoch/RoyPow). Use the address type of each pack's connectable adverts. controller: any tunable from controller.TUNABLES, lower-case; raise taper_start_v/taper_end_v if the chargers absorb above 14.2 V.",
+  "protocol": "roypow",
+  "packs": {
+    "pack1": {"mac": "AA:BB:CC:DD:EE:01", "address_type": "public"},
+    "pack2": {"mac": "AA:BB:CC:DD:EE:02", "address_type": "public"}
+  },
+  "controller": {
+    "cells_per_pack": 4,
+    "per_pack_a": 100
+  }
+}

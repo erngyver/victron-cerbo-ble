@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"        # Venus OS v3.7x ships 3.12
+      - name: venus_ble
+        run: python3 venus_ble/test_venus_ble.py
+      - name: softbms
+        working-directory: softbms
+        run: for t in test_*.py; do python3 "$t" || exit 1; done
+
+  node-red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: function nodes
+        run: node --test node-red/test_function_nodes.js
